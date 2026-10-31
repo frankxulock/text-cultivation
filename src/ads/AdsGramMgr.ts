@@ -1,4 +1,5 @@
 import { AdConfig } from '../config/AdConfig';
+import { isInTelegram } from '../tg/TelegramApp';
 
 type AdKind = 'reward' | 'interstitial';
 
@@ -9,6 +10,10 @@ interface Controllers {
 
 const controllers: Controllers = {};
 let inited = false;
+let busy = false;
+
+/** 只有本地 npm run dev 才用确认框模拟广告；上线包绝不在没看广告时发奖 */
+const SIMULATE = import.meta.env.DEV;
 
 function canUseSdk(blockId: string): boolean {
   return Boolean(blockId && window.Adsgram);
@@ -38,31 +43,40 @@ export function initAdsGram(): void {
 }
 
 export function isAdsReady(kind: AdKind): boolean {
-  if (kind === 'reward') {
-    return Boolean(controllers.reward) || AdConfig.debug || !AdConfig.rewardBlockId;
+  if (SIMULATE) {
+    return true;
   }
-  return Boolean(controllers.interstitial) || AdConfig.debug || !AdConfig.interstitialBlockId;
+  // AdsGram 只能在 Telegram 里出广告，普通浏览器里不显示入口
+  const ctrl = kind === 'reward' ? controllers.reward : controllers.interstitial;
+  return Boolean(ctrl) && isInTelegram();
 }
 
 /**
- * 展示广告。
- * - 已配置 AdsGram：走真实 SDK
- * - 未配置 / 本地调试：弹出确认模拟（方便浏览器测奖励链路）
+ * 展示广告，看完才返回 true；跳过、失败、没配置、正在播都返回 false。
+ * - 已配置 AdsGram 且在 Telegram 内：走真实 SDK
+ * - 本地 npm run dev：弹出确认模拟（方便浏览器测奖励链路）
  */
 export function showAd(kind: AdKind): Promise<boolean> {
   initAdsGram();
   const ctrl = kind === 'reward' ? controllers.reward : controllers.interstitial;
 
-  if (ctrl) {
-    return ctrl
-      .show()
-      .then(() => true)
-      .catch(() => false);
+  if (busy) {
+    return Promise.resolve(false);
   }
 
-  // 本地 / 未填 BlockId：模拟激励（插屏直接跳过不算奖励）
-  if (kind === 'interstitial') {
-    return Promise.resolve(true);
+  if (ctrl && isInTelegram()) {
+    busy = true;
+    return ctrl
+      .show()
+      .then((result) => Boolean(result && result.done !== false))
+      .catch(() => false)
+      .finally(() => {
+        busy = false;
+      });
+  }
+
+  if (!SIMULATE || kind === 'interstitial') {
+    return Promise.resolve(false);
   }
 
   return new Promise((resolve) => {

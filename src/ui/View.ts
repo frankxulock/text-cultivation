@@ -10,6 +10,7 @@ import { listOwnedArtifacts } from '../systems/ArtifactSys';
 import { getBuildingLines, listUpgradeOptions, buildingLabel } from '../systems/ManageSys';
 import { listActiveQuests } from '../systems/QuestSys';
 import { remainingRewardAds } from '../systems/AdRewardSys';
+import { isAdsReady } from '../ads/AdsGramMgr';
 import { listLearnable, listOwnedTechniques } from '../systems/TechniqueSys';
 
 export type PanelMode =
@@ -305,10 +306,15 @@ export class View {
 
     if (this.mode === 'ads') {
       const left = remainingRewardAds(state);
+      const ready = isAdsReady('reward');
       return `
         <div class="panel-title">—— 天机广告（AdsGram）——</div>
-        <div class="empty">观看激励广告可领取灵石、灵气与短时凝神加成。今日剩余 ${left} 次。</div>
-        <button type="button" class="btn btn-primary" data-action="watch-ad" ${left <= 0 ? 'disabled' : ''}>看广告领补给</button>
+        <div class="empty">${
+          ready
+            ? `观看激励广告可领取灵石、灵气与短时凝神加成。今日剩余 ${left} 次。`
+            : '天机广告暂未开放，可先邀请好友同修。'
+        }</div>
+        <button type="button" class="btn btn-primary" data-action="watch-ad" ${left <= 0 || !ready ? 'disabled' : ''}>${ready ? '看广告领补给' : '广告暂未开放'}</button>
         <button type="button" class="btn" data-action="share-invite">邀请好友</button>
         <button type="button" class="btn btn-secondary" data-action="back">返回</button>
       `;
